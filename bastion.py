@@ -7,10 +7,27 @@ from Crypto.Protocol.KDF import scrypt
 from datetime import datetime
 import sys, getopt, json, os, base58
 
-def decode(filename,password,subaction,subparam,opts):
-    if password is None:
-        password = input("Enter password :\n")
+def cur_ver():
+    try:
+        with open("setup.py") as file:
+            dataver = file.readlines()
+        for line in dataver:
+            if "version=\"" in line:
+                version = line.split('"')[1]
+            if "description=\"" in line:
+                desc = line.split('"')[1]
+            if "url=\"" in line:
+                url = line.split('"')[1]
+    except:
+        version = "0.0.1"
+        desc = "KTBastion"
+        url = "https://github.com/ktnoc/ktbastion"
+    print(desc,"v"+version,"-",url)
 
+def decode(filename,password,subaction,subparam,opts,export):
+    print("\nAction :",subaction)
+    print("File :",filename)
+    print("Decoding in progress, please wait...\n")
     f = open(filename,"r")
     data = f.read()
 
@@ -29,15 +46,27 @@ def decode(filename,password,subaction,subparam,opts):
     data = json.loads(original_data.decode("utf-8"))
     
     if len(data) == 0 and not subaction == "add":
-        print("empty file")
+        print("Error: the file contains no keys")
     else:
-        print(subaction)
         if subaction == "list": 
             keylist = list(data.keys())
             print("Key list :", keylist)
-        if subaction == "view":
-            print("Viewing", subparam)
-            print(data[subparam]['keys'])
+        if subaction == "show":
+            print("-> Key :", subparam)
+            print("-> Exporting :", export,"\n")
+            if export:
+                for opt, arg in opts:
+                    if opt in ("-e", "--export"):
+                        export_file = arg
+                if os.path.exists(export_file):
+                    print("Export skipped : File exists")
+                else:
+                    print("Exporting to file :",arg)
+                    f = open(arg,"w+")
+                    f.write(data[subparam]['keys'])
+                    f.close()
+            else:
+                print(data[subparam]['keys'])
         if subaction == "remove":
             if subparam in data:
                 del data[subparam]
@@ -45,7 +74,6 @@ def decode(filename,password,subaction,subparam,opts):
                 save(password,filename,final)
         if subaction == "add":
             if not subparam in data:
-                print(subparam)
                 for opt, arg in opts:
                     if opt in ("-k", "--key"):
                         now = datetime.now()
@@ -53,10 +81,22 @@ def decode(filename,password,subaction,subparam,opts):
                         new_dict[subparam] = {}
                         new_dict[subparam]["keys"] = arg.split(',')
                         new_dict[subparam]["date"] = str(now.day)+'/'+str(now.month)+'/'+str(now.year) 
-#                        print(new_dict)
                         data.update(new_dict)
                         final = bytes(json.dumps(data).encode("utf-8"))
                         save(password,filename,final)
+                    if opt in ("-f", "--file"):
+                        if os.path.exists(arg) and os.access(arg, os.R_OK):
+                            now = datetime.now()
+                            new_dict = {}
+                            new_dict[subparam] = {}
+                            new_dict[subparam]["keys"] = str(open(arg, "r").read())
+                            new_dict[subparam]["date"] = str(now.day)+'/'+str(now.month)+'/'+str(now.year)
+                            data.update(new_dict)
+                            final = bytes(json.dumps(data).encode("utf-8"))
+                            save(password,filename,final)
+                        else:
+                            print("nonexistent, or no access")
+
 
 def save(password,filename,data=''):
     data = bytes(data)
@@ -76,8 +116,6 @@ def save(password,filename,data=''):
 def create(filename,password):
     print("create",filename)
     salt = get_random_bytes(32)
-    if password is None:
-        password = input("Enter password :\n")
 
     data = b'{}'
 
@@ -98,10 +136,11 @@ def invalid_command(argv):
 
 def main(argv):
     try:
-        opts, args = getopt.getopt(argv,"hc:d:p:a:lr:v:k:",["help","create=","decode=","password=","add=","list","remove=","view=","key="])
+        opts, args = getopt.getopt(argv,"hc:d:p:a:lr:s:k:f:e:v",["help","create=","decode=","password=","add=","list","remove=","show=","key=","file=","export=","version"])
     except getopt.GetoptError:
         invalid_command(argv)
     filename = action = password = subaction = subparam = None
+    export = is_classic = is_file = create_bool = decode_bool = False
     for opt, arg in opts:
         if opt in ("-h", "--help"):
             print("""
@@ -110,39 +149,67 @@ def main(argv):
        -d [--decode] <existing_bastion_file> : use a bastion file
      """)
             sys.exit()
+        if opt in ("-v", "--version"):
+            cur_ver()
+            sys.exit()
+
         elif opt in ("-c","--create"):
             action = "create"
+            create_bool = True
             if os.path.exists(arg):
-                print(arg,"already exists, exiting")
+                print("Error :",arg,"already exists, exiting")
                 sys.exit()
             else:
                 filename = arg
         elif opt in ("-d", "--decode"):
             action = "decode"
+            decode_bool = True
             if os.path.exists(arg):
                 filename = arg
             else:
+                print("Error :",arg,"does not exist")
                 sys.exit()
         elif opt in ("-p", "--password"):
             password  = arg
         elif opt in ("-a", "--add"):
             subaction = "add"
             subparam = arg
-            #print(opts)
         elif opt in ("-l", "--list"):
             subaction = "list"
         elif opt in ("-r", "--remove"):
             subaction = "remove"
             subparam = arg
-        elif opt in ("-v", "--view"):
-            subaction = "view"
+        elif opt in ("-s", "--s"):
+            subaction = "show"
             subparam = arg
-
-    if action == "create":
+        elif opt in ("-k", "--key"):
+            is_classic = True
+        elif opt in ("-f", "--file"):
+            is_file = True
+        elif opt in ("-e", "--export"):
+            export = True
+            if os.path.exists(arg):
+                print("Error : cannot export, file exists")
+                sys.exit()
+    if decode_bool and create_bool:
+        print("Error: cannot create and decode on same time")
+    elif password is None:
+        print("Error: empty password")
+    elif ' ' in password:
+        print("Error: space in password")
+    elif action == "create":
         create(filename,password)
     elif action == "decode":
         if not subaction is None:
-            decode(filename,password,subaction,subparam,opts) 
+            if subaction == "add":
+                if is_classic and is_file:
+                    print("Error: cannot add file and key on same time")
+                if not is_classic and not is_file:
+                    print("Error: cannot add empty data for new key",subparam)
+                else:
+                    decode(filename,password,subaction,subparam,opts,export)
+            else:
+                decode(filename,password,subaction,subparam,opts,export)
 if __name__ == "__main__":
    main(sys.argv[1:])
 
