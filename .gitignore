@@ -6,4 +6,4 @@ venv/*
 MANIFEST
 *~
 *.bak
-
+*.dat

@@ -5,7 +5,7 @@ from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Protocol.KDF import scrypt
 
 from datetime import datetime
-import sys, getopt, json, os, base58
+import sys, getopt, json, os, base58, getpass
 
 def cur_ver():
     try:
@@ -191,9 +191,11 @@ def main(argv):
             if os.path.exists(arg):
                 print("Error : cannot export, file exists")
                 sys.exit()
+    if password is None:
+        password = getpass.getpass("Enter password :\n")
     if decode_bool and create_bool:
         print("Error: cannot create and decode on same time")
-    elif password is None:
+    elif not password:
         print("Error: empty password")
     elif ' ' in password:
         print("Error: space in password")
