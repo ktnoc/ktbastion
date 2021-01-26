@@ -20,10 +20,7 @@ setuptools.setup(
     ],
     python_requires='>=3.6',
     install_requires=[
-        'pycryptodome>10.1.2',
+        'pycryptodome',
         'base58'
-    ],
-    dependency_links=[
-        'git+https://github.com/Legrandin/pycryptodome.git@0caeb760e2a56cd8c714b6771c7e09e583482985#egg=pycryptodome-10.1.2.1'
     ]
 )
